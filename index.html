@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>Slither.io Clone - Improved Infinite Food Spawn</title>
+<title>Slither.io Clone - Speed Increase & Winner Screen</title>
 <style>
   html, body {
     margin: 0; padding: 0; overflow: hidden;
@@ -25,6 +25,7 @@
     width: 100vw;
     height: 100vh;
     border-radius: 0;
+    z-index: 1;
   }
   #scoreboard {
     position: fixed;
@@ -37,7 +38,7 @@
     text-shadow: 0 0 12px #00ffdaee;
     user-select: none;
     letter-spacing: 0.1em;
-    z-index: 10;
+    z-index: 5;
     pointer-events: none;
   }
   #instructions {
@@ -49,30 +50,71 @@
     font-size: 15px;
     font-weight: 500;
     user-select: none;
-    z-index: 10;
+    z-index: 5;
     pointer-events: none;
+  }
+  #winnerOverlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background: rgba(10, 20, 30, 0.95);
+    color: #00ffda;
+    font-size: 36px;
+    font-weight: 900;
+    text-align: center;
+    padding-top: 40vh;
+    z-index: 10;
+    user-select: none;
+    letter-spacing: 0.12em;
+  }
+  #winnerOverlay button {
+    margin-top: 30px;
+    font-size: 22px;
+    font-weight: 700;
+    color: #121821;
+    background: #00ffda;
+    border: none;
+    border-radius: 12px;
+    padding: 14px 36px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+  }
+  #winnerOverlay button:hover {
+    background: #00d1b5;
   }
 </style>
 </head>
 <body>
 <div id="scoreboard">Score: 0</div>
-<div id="instructions">Use mouse/touch to steer the snake. Eat colorful glowing food to grow!</div>
+<div id="instructions">Use mouse/touch to steer the snake. Eat colorful glowing food to speed up!</div>
 <canvas id="gameCanvas"></canvas>
+<div id="winnerOverlay">
+  🎉 YOU WIN! 🎉<br/>
+  Congratulations on your achievement!<br/>
+  <button id="restartBtn">Play Again</button>
+</div>
 <script>
 (() => {
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
+  const scoreboard = document.getElementById('scoreboard');
+  const winnerOverlay = document.getElementById('winnerOverlay');
+  const restartBtn = document.getElementById('restartBtn');
 
   let WIDTH = window.innerWidth;
   let HEIGHT = window.innerHeight;
 
-  // Increased food count to spawn more food
+  // Game parameters
   const FOOD_COUNT = 90;
   const SNAKE_INITIAL_LENGTH = 14;
   const SEGMENT_SIZE = 18;
-  const SNAKE_SPEED = 3.6;
+  const SPEED_INCREMENT = 0.07; // Reduced speed increase per food
+  const MAX_SPEED = 8.0;
+  const BASE_SPEED = 3.6;
   const TURN_SPEED = 0.05;
   const FOOD_SIZE = 12;
+  const WIN_SCORE = 50; // Increased win score to 50
 
   const FOOD_COLORS = [
     '#ff3c00', '#ffba00', '#44ff00', '#00ffd5', '#007bff', '#ff00d6',
@@ -86,6 +128,8 @@
   let food = [];
   let inputX = WIDTH / 2;
   let inputY = HEIGHT / 2;
+  let snakeSpeed = BASE_SPEED;
+  let isGameOver = false;
 
   function resizeCanvas() {
     WIDTH = window.innerWidth;
@@ -113,6 +157,9 @@
     }
     snakeDirection = 0;
     targetDirection = 0;
+    snakeSpeed = BASE_SPEED;
+    isGameOver = false;
+    winnerOverlay.style.display = 'none';
   }
 
   function initFood() {
@@ -157,8 +204,8 @@
 
   function updateSnake() {
     const head = snake[0];
-    const newHeadX = head.x + Math.cos(snakeDirection) * SNAKE_SPEED;
-    const newHeadY = head.y + Math.sin(snakeDirection) * SNAKE_SPEED;
+    const newHeadX = head.x + Math.cos(snakeDirection) * snakeSpeed;
+    const newHeadY = head.y + Math.sin(snakeDirection) * snakeSpeed;
 
     snake.unshift({x: newHeadX, y: newHeadY, angle: snakeDirection});
     snake.pop();
@@ -174,23 +221,9 @@
     return -1;
   }
 
-  function growSnake(amount) {
-    for(let i = 0; i < amount; i++) {
-      const tailIndex = snake.length - 1;
-      const last = snake[tailIndex];
-      const prev = snake[tailIndex - 1] || last;
-      let dx = last.x - prev.x;
-      let dy = last.y - prev.y;
-      if(dx === 0 && dy === 0) {
-        dx = Math.cos(last.angle + Math.PI);
-        dy = Math.sin(last.angle + Math.PI);
-      }
-      snake.push({
-        x: last.x + dx,
-        y: last.y + dy,
-        angle: last.angle
-      });
-    }
+  function growSnake() {
+    // No snake growth, speed increased instead
+    snakeSpeed = Math.min(snakeSpeed + SPEED_INCREMENT, MAX_SPEED);
   }
 
   function worldToScreen(x, y, viewportX, viewportY) {
@@ -321,7 +354,6 @@
   }
 
   function updateScore() {
-    const scoreboard = document.getElementById('scoreboard');
     scoreboard.textContent = `Score: ${score}`;
   }
 
@@ -348,7 +380,23 @@
     inputY = HEIGHT / 2;
   }
 
+  function showWinnerScreen() {
+    isGameOver = true;
+    winnerOverlay.style.display = 'block';
+  }
+  function restartGame() {
+    initSnake();
+    initFood();
+    updateScore();
+    isGameOver = false;
+    winnerOverlay.style.display = 'none';
+    requestAnimationFrame(gameLoop);
+  }
+  restartBtn.addEventListener('click', restartGame);
+
   function gameLoop() {
+    if(isGameOver) return;
+
     clearCanvas();
 
     updateInputDirection();
@@ -368,12 +416,15 @@
 
     if(eatenIndex !== -1) {
       food.splice(eatenIndex, 1);
-      growSnake(5);
       score++;
       updateScore();
+      growSnake();
+      if(score >= WIN_SCORE) {
+        showWinnerScreen();
+        return;
+      }
     }
 
-    // Food spawn rings: near, far, and rare ultra-far
     const RING_NEAR = 1500;
     const RING_FAR = 2500;
     const RING_ULTRA_FAR = 4000;
@@ -381,29 +432,19 @@
     while(food.length < FOOD_COUNT) {
       let rand = Math.random();
       let spawnRadius;
-      if(rand < 0.05) { // 5% spawn ultra far rare food beyond far ring
+      if(rand < 0.05) {
         spawnRadius = RING_ULTRA_FAR;
-      } else if(rand < 0.55) { // 50% far ring food
+      } else if(rand < 0.55) {
         spawnRadius = RING_FAR;
-      } else { // 45% near ring food
+      } else {
         spawnRadius = RING_NEAR;
       }
-
       let angle = Math.random() * 2 * Math.PI;
-
-      // Calculate radius for ring spawn uniformly distributed in ring area
       let minRadius = 0;
-      if(spawnRadius === RING_NEAR) {
-        minRadius = 0;
-      } else if(spawnRadius === RING_FAR) {
-        minRadius = RING_NEAR;
-      } else { // ultra far
-        minRadius = RING_FAR;
-      }
-
-      let radius = Math.sqrt(
-        Math.random() * (spawnRadius * spawnRadius - minRadius * minRadius) + minRadius * minRadius
-      );
+      if(spawnRadius === RING_NEAR) minRadius = 0;
+      else if(spawnRadius === RING_FAR) minRadius = RING_NEAR;
+      else minRadius = RING_FAR;
+      let radius = Math.sqrt(Math.random() * (spawnRadius*spawnRadius - minRadius*minRadius) + minRadius*minRadius);
       let fx = viewportX + radius * Math.cos(angle);
       let fy = viewportY + radius * Math.sin(angle);
       food.push({
@@ -442,12 +483,13 @@
     updateScore();
     requestAnimationFrame(gameLoop);
   }
-
   init();
+
 })();
 </script>
 </body>
 </html>
+
 
 
 
