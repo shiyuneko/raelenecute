@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Slither.io Clone - Fullscreen & Shapes</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; overflow: hidden;
+    height: 100%; width: 100%;
+    background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+  #gameCanvas {
+    display: block;
+    margin: 0;
+    background: #121821;
+    box-shadow: 0 0 20px #00ffda88, inset 0 0 10px #00ffda88;
+    touch-action: none;
+    image-rendering: pixelated;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0; /* no rounding, full screen */
+  }
+  #scoreboard {
+    position: fixed;
+    top: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #00ffda;
+    font-size: 22px;
+    font-weight: 700;
+    text-shadow: 0 0 10px #00ffdcee;
+    user-select: none;
+    letter-spacing: 0.1em;
+    z-index: 10;
+    pointer-events: none;
+  }
+  #instructions {
+    position: fixed;
+    bottom: 20px;
+    width: 100%;
+    text-align: center;
+    color: #00ffdaaa;
+    font-size: 15px;
+    font-weight: 500;
+    user-select: none;
+    z-index: 10;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="scoreboard">Score: 0</div>
+<div id="instructions">Use mouse/touch to steer the snake. Eat glowing food to grow!</div>
+<canvas id="gameCanvas"></canvas>
+<script>
+(() => {
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // Dynamic width and height
+  let WIDTH = window.innerWidth;
+  let HEIGHT = window.innerHeight;
+
+  // Constants
+  const FOOD_COUNT = 40;
+  const SNAKE_INITIAL_LENGTH = 12;
+  const SEGMENT_SIZE = 16;
+  const SNAKE_SPEED = 3.2;
+  const TURN_SPEED = 0.06;
+  const FOOD_SIZE = 10;
+  const FOOD_GLOW_COLOR = '#00ffda';
+
+  // State variables
+  let score = 0;
+  let snake = [];
+  let snakeDirection = 0;
+  let targetDirection = 0;
+  let food = [];
+  let inputX = WIDTH / 2;
+  let inputY = HEIGHT / 2;
+
+  // Setup canvas size function
+  function resizeCanvas() {
+    WIDTH = window.innerWidth;
+    HEIGHT = window.innerHeight;
+    canvas.width = WIDTH;
+    canvas.height = HEIGHT;
+  }
+
+  window.addEventListener('resize', () => {
+    resizeCanvas();
+    // Re-center input on resize
+    inputX = WIDTH / 2;
+    inputY = HEIGHT / 2;
+  });
+
+  resizeCanvas();
+
+  // Initialize snake centered
+  function initSnake() {
+    snake = [];
+    const startX = WIDTH / 2;
+    const startY = HEIGHT / 2;
+    for (let i = 0; i < SNAKE_INITIAL_LENGTH; i++) {
+      snake.push({
+        x: startX - i * SEGMENT_SIZE,
+        y: startY,
+        angle: 0 // store angle for segment orientation
+      });
+    }
+    snakeDirection = 0;
+    targetDirection = 0;
+  }
+
+  // Initialize food randomly with safe distance from snake start
+  function initFood() {
+    food = [];
+    while (food.length < FOOD_COUNT) {
+      const fx = Math.random() * (WIDTH - FOOD_SIZE * 2) + FOOD_SIZE;
+      const fy = Math.random() * (HEIGHT - FOOD_SIZE * 2) + FOOD_SIZE;
+      const dx = fx - WIDTH / 2;
+      const dy = fy - HEIGHT / 2;
+      if (Math.sqrt(dx * dx + dy * dy) > 120) {
+        food.push({ x: fx, y: fy });
+      }
+    }
+  }
+
+  // Helpers
+  function angleTo(ax, ay, bx, by) {
+    return Math.atan2(by - ay, bx - ax);
+  }
+  function dist(ax, ay, bx, by) {
+    let dx = bx - ax;
+    let dy = by - ay;
+    return Math.sqrt(dx*dx + dy*dy);
+  }
+  function normalizeAngle(angle) {
+    while (angle > Math.PI) angle -= 2 * Math.PI;
+    while (angle < -Math.PI) angle += 2 * Math.PI;
+    return angle;
+  }
+
+  // Update turning direction smoothly
+  function updateDirection() {
+    let diff = normalizeAngle(targetDirection - snakeDirection);
+    if (Math.abs(diff) < TURN_SPEED) {
+      snakeDirection = targetDirection;
+    } else {
+      snakeDirection += diff > 0 ? TURN_SPEED : -TURN_SPEED;
+      snakeDirection = normalizeAngle(snakeDirection);
+    }
+  }
+
+  // Update snake position and segments storing angle for shape orientation
+  function updateSnake() {
+    const head = snake[0];
+    const newHeadX = head.x + Math.cos(snakeDirection) * SNAKE_SPEED;
+    const newHeadY = head.y + Math.sin(snakeDirection) * SNAKE_SPEED;
+
+    snake.unshift({ x: newHeadX, y: newHeadY, angle: snakeDirection });
+    snake.pop();
+
+    // Wrap edges
+    if (snake[0].x < 0) snake[0].x += WIDTH;
+    if (snake[0].x > WIDTH) snake[0].x -= WIDTH;
+    if (snake[0].y < 0) snake[0].y += HEIGHT;
+    if (snake[0].y > HEIGHT) snake[0].y -= HEIGHT;
+  }
+
+  // Check collision with food returns food index
+  function checkFoodCollision() {
+    const head = snake[0];
+    for (let i = 0; i < food.length; i++) {
+      if (dist(head.x, head.y, food[i].x, food[i].y) < FOOD_SIZE + SEGMENT_SIZE * 0.6) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  // Grow snake by adding segments at tail location and angle
+  function growSnake(amount) {
+    for (let i = 0; i < amount; i++) {
+      const tailIndex = snake.length - 1;
+      const last = snake[tailIndex];
+      const prev = snake[tailIndex - 1] || last;
+      let dx = last.x - prev.x;
+      let dy = last.y - prev.y;
+      // If no movement, just push same position
+      if(dx === 0 && dy === 0) {
+        dx = Math.cos(last.angle + Math.PI);
+        dy = Math.sin(last.angle + Math.PI);
+      }
+      snake.push({
+        x: last.x + dx,
+        y: last.y + dy,
+        angle: last.angle
+      });
+    }
+  }
+
+  // Draw a single snake segment as a rotated rounded rectangle
+  function drawSegment(x, y, angle, size, color) {
+    const w = size * 1.3;
+    const h = size * 0.9;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    // Shadow glow around segment
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = color;
+    roundRect(ctx, -w/2, -h/2, w, h, h/2);
+    ctx.restore();
+  }
+
+  // Draw glow food as diamond shape with glow
+  function drawFoodItem(x, y, size, color) {
+    const glowRadius = size * 1.8;
+    // Glow
+    let gradient = ctx.createRadialGradient(x, y, size * 0.3, x, y, glowRadius);
+    gradient.addColorStop(0, color);
+    gradient.addColorStop(1, 'transparent');
+
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.ellipse(x, y, glowRadius, glowRadius * 0.8, Math.PI / 4, 0, 2 * Math.PI);
+    ctx.fill();
+
+    // Diamond shape
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x, y - size);
+    ctx.lineTo(x + size, y);
+    ctx.lineTo(x, y + size);
+    ctx.lineTo(x - size, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Round rectangle helper
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Clear canvas
+  function clearCanvas() {
+    ctx.clearRect(0, 0, WIDTH, HEIGHT);
+  }
+
+  // Draw snake with gradient color and shape segments
+  function drawSnake() {
+    if (snake.length < 1) return;
+    for (let i = snake.length - 1; i >= 0; i--) {
+      const segment = snake[i];
+      const t = i / snake.length;
+      // Gradient from teal to dark teal
+      const colR = Math.floor(0 + (0 - 0) * t);
+      const colG = Math.floor(255 - 255 * t);
+      const colB = Math.floor(217 - 217 * t);
+      const alpha = 0.8 - t * 0.65;
+
+      const color = `rgba(${colR},${colG},${colB},${alpha})`;
+      drawSegment(segment.x, segment.y, segment.angle, SEGMENT_SIZE, color);
+    }
+  }
+
+  // Update input direction from mouse/touch
+  function updateInputDirection() {
+    const head = snake[0];
+    const angle = angleTo(head.x, head.y, inputX, inputY);
+    targetDirection = angle;
+  }
+
+  // Update score display
+  function updateScore() {
+    const scoreboard = document.getElementById('scoreboard');
+    scoreboard.textContent = `Score: ${score}`;
+  }
+
+  // Setup pointer input handlers
+  function setupInput() {
+    function pointerMove(evt) {
+      evt.preventDefault();
+      let x, y;
+      if (evt.touches && evt.touches.length > 0) {
+        x = evt.touches[0].clientX;
+        y = evt.touches[0].clientY;
+      } else {
+        x = evt.clientX;
+        y = evt.clientY;
+      }
+      if (x < 0) x = 0;
+      if (x > WIDTH) x = WIDTH;
+      if (y < 0) y = 0;
+      if (y > HEIGHT) y = HEIGHT;
+      inputX = x;
+      inputY = y;
+    }
+    canvas.addEventListener('mousemove', pointerMove);
+    canvas.addEventListener('touchmove', pointerMove, { passive: false });
+    inputX = WIDTH / 2;
+    inputY = HEIGHT / 2;
+  }
+
+  // Main loop
+  function gameLoop() {
+    clearCanvas();
+
+    updateInputDirection();
+    updateDirection();
+    updateSnake();
+
+    const eatenIndex = checkFoodCollision();
+    if (eatenIndex !== -1) {
+      food.splice(eatenIndex, 1);
+      growSnake(4);
+      score++;
+      updateScore();
+
+      let tries = 0;
+      while (tries < 50) {
+        const fx = Math.random() * (WIDTH - FOOD_SIZE * 2) + FOOD_SIZE;
+        const fy = Math.random() * (HEIGHT - FOOD_SIZE * 2) + FOOD_SIZE;
+        if (dist(fx, fy, snake[0].x, snake[0].y) > 120) {
+          food.push({ x: fx, y: fy });
+          break;
+        }
+        tries++;
+      }
+    }
+
+    // Draw all food items
+    food.forEach(f => drawFoodItem(f.x, f.y, FOOD_SIZE, FOOD_GLOW_COLOR));
+    drawSnake();
+
+    requestAnimationFrame(gameLoop);
+  }
+
+  // Initialize everything
+  function init() {
+    initSnake();
+    initFood();
+    setupInput();
+    updateScore();
+    requestAnimationFrame(gameLoop);
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
+
