@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>Slither.io Clone - Speed Increase & Winner Screen</title>
+<title>Slither.io Clone - Speed Increase & Winner Screen (Fixed Restart)</title>
 <style>
   html, body {
     margin: 0; padding: 0; overflow: hidden;
@@ -109,12 +109,12 @@
   const FOOD_COUNT = 90;
   const SNAKE_INITIAL_LENGTH = 14;
   const SEGMENT_SIZE = 18;
-  const SPEED_INCREMENT = 0.07; // Reduced speed increase per food
+  const SPEED_INCREMENT = 0.07; // Speed increase per food
   const MAX_SPEED = 8.0;
   const BASE_SPEED = 3.6;
   const TURN_SPEED = 0.05;
   const FOOD_SIZE = 12;
-  const WIN_SCORE = 50; // Increased win score to 50
+  const WIN_SCORE = 50; // Win score threshold
 
   const FOOD_COLORS = [
     '#ff3c00', '#ffba00', '#44ff00', '#00ffd5', '#007bff', '#ff00d6',
@@ -158,8 +158,6 @@
     snakeDirection = 0;
     targetDirection = 0;
     snakeSpeed = BASE_SPEED;
-    isGameOver = false;
-    winnerOverlay.style.display = 'none';
   }
 
   function initFood() {
@@ -221,8 +219,7 @@
     return -1;
   }
 
-  function growSnake() {
-    // No snake growth, speed increased instead
+  function increaseSpeed() {
     snakeSpeed = Math.min(snakeSpeed + SPEED_INCREMENT, MAX_SPEED);
   }
 
@@ -385,9 +382,11 @@
     winnerOverlay.style.display = 'block';
   }
   function restartGame() {
+    score = 0;
     initSnake();
     initFood();
     updateScore();
+    snakeSpeed = BASE_SPEED;
     isGameOver = false;
     winnerOverlay.style.display = 'none';
     requestAnimationFrame(gameLoop);
@@ -418,7 +417,7 @@
       food.splice(eatenIndex, 1);
       score++;
       updateScore();
-      growSnake();
+      increaseSpeed();
       if(score >= WIN_SCORE) {
         showWinnerScreen();
         return;
@@ -481,6 +480,7 @@
     initFood();
     setupInput();
     updateScore();
+    isGameOver = false;
     requestAnimationFrame(gameLoop);
   }
   init();
@@ -489,8 +489,5 @@
 </script>
 </body>
 </html>
-
-
-
 
 
