@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>Slither.io Clone - Speed Increase & Winner Screen (Fixed Restart)</title>
+<title>Slither.io Clone - Two Levels with Enemies (Fixed Controls)</title>
 <style>
   html, body {
     margin: 0; padding: 0; overflow: hidden;
@@ -53,7 +53,7 @@
     z-index: 5;
     pointer-events: none;
   }
-  #winnerOverlay {
+  #overlay {
     display: none;
     position: fixed;
     top: 0; left: 0;
@@ -68,7 +68,7 @@
     user-select: none;
     letter-spacing: 0.12em;
   }
-  #winnerOverlay button {
+  #overlay button {
     margin-top: 30px;
     font-size: 22px;
     font-weight: 700;
@@ -80,27 +80,28 @@
     cursor: pointer;
     transition: background 0.3s ease;
   }
-  #winnerOverlay button:hover {
+  #overlay button:hover {
     background: #00d1b5;
   }
 </style>
 </head>
 <body>
 <div id="scoreboard">Score: 0</div>
-<div id="instructions">Use mouse/touch to steer the snake. Eat colorful glowing food to speed up!</div>
+<div id="instructions">Use mouse/touch to steer the snake.</div>
 <canvas id="gameCanvas"></canvas>
-<div id="winnerOverlay">
-  🎉 YOU WIN! 🎉<br/>
-  Congratulations on your achievement!<br/>
-  <button id="restartBtn">Play Again</button>
+<div id="overlay">
+  <div id="overlayMessage">🎉 YOU WIN! 🎉</div><br/>
+  <button id="overlayButton">Play Again</button>
 </div>
 <script>
 (() => {
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
   const scoreboard = document.getElementById('scoreboard');
-  const winnerOverlay = document.getElementById('winnerOverlay');
-  const restartBtn = document.getElementById('restartBtn');
+  const overlay = document.getElementById('overlay');
+  const overlayMessage = document.getElementById('overlayMessage');
+  const overlayButton = document.getElementById('overlayButton');
+  const instructions = document.getElementById('instructions');
 
   let WIDTH = window.innerWidth;
   let HEIGHT = window.innerHeight;
@@ -109,18 +110,27 @@
   const FOOD_COUNT = 90;
   const SNAKE_INITIAL_LENGTH = 14;
   const SEGMENT_SIZE = 18;
-  const SPEED_INCREMENT = 0.07; // Speed increase per food
+  const SPEED_INCREMENT = 0.07;
   const MAX_SPEED = 8.0;
   const BASE_SPEED = 3.6;
   const TURN_SPEED = 0.05;
   const FOOD_SIZE = 12;
-  const WIN_SCORE = 50; // Win score threshold
+  const WIN_SCORE = 50;
+
+  // Enemy parameters for level 2
+  const ENEMY_SIZE = 30;
+  const ENEMY_PROJECTILE_SIZE = 8;
+  const ENEMY_PROJECTILE_SPEED = 6;
+  const ENEMY_SHOOT_INTERVAL = 1500; // ms
+  const ENEMY_MOVE_SPEED = 1.2;
+  const NUM_ENEMIES = 5;
 
   const FOOD_COLORS = [
     '#ff3c00', '#ffba00', '#44ff00', '#00ffd5', '#007bff', '#ff00d6',
     '#ffffff', '#ffaaff', '#aaffff', '#ffff00',
   ];
 
+  // Game state variables
   let score = 0;
   let snake = [];
   let snakeDirection = 0;
@@ -130,7 +140,13 @@
   let inputY = HEIGHT / 2;
   let snakeSpeed = BASE_SPEED;
   let isGameOver = false;
+  let currentLevel = 1;
 
+  // Enemy & projectile arrays
+  let enemies = [];
+  let projectiles = [];
+
+  // Resize canvas on window size changes
   function resizeCanvas() {
     WIDTH = window.innerWidth;
     HEIGHT = window.innerHeight;
@@ -144,6 +160,7 @@
   });
   resizeCanvas();
 
+  // Initialize snake at origin fixed length no growth
   function initSnake() {
     snake = [];
     const startX = 0;
@@ -160,6 +177,7 @@
     snakeSpeed = BASE_SPEED;
   }
 
+  // Initialize food around snake for both levels
   function initFood() {
     food = [];
     const nearRadius = 1500;
@@ -176,6 +194,36 @@
     }
   }
 
+  // Initialize enemies for level 2 around snake viewport
+  function initEnemies() {
+    enemies = [];
+    const spawnRadius = 1000;
+    for(let i=0; i<NUM_ENEMIES; i++) {
+      let angle = Math.random() * 2 * Math.PI;
+      let radius = Math.sqrt(Math.random()) * spawnRadius;
+      enemies.push({
+        x: snake[0].x + radius * Math.cos(angle),
+        y: snake[0].y + radius * Math.sin(angle),
+        angle: 0,
+        lastShot: 0
+      });
+    }
+  }
+
+  // Spawn a projectile from an enemy towards snake head
+  function spawnProjectile(enemy) {
+    const head = snake[0];
+    const angle = Math.atan2(head.y - enemy.y, head.x - enemy.x);
+    projectiles.push({
+      x: enemy.x,
+      y: enemy.y,
+      angle: angle,
+      speed: ENEMY_PROJECTILE_SPEED,
+      radius: ENEMY_PROJECTILE_SIZE
+    });
+  }
+
+  // Math helpers
   function angleTo(ax, ay, bx, by) {
     return Math.atan2(by - ay, bx - ax);
   }
@@ -190,6 +238,7 @@
     return angle;
   }
 
+  // Smooth turning for snake
   function updateDirection() {
     const diff = normalizeAngle(targetDirection - snakeDirection);
     if (Math.abs(diff) < TURN_SPEED) {
@@ -200,6 +249,7 @@
     }
   }
 
+  // Move snake forward fixed length no growth
   function updateSnake() {
     const head = snake[0];
     const newHeadX = head.x + Math.cos(snakeDirection) * snakeSpeed;
@@ -209,6 +259,7 @@
     snake.pop();
   }
 
+  // Check collisions with food, return index or -1
   function checkFoodCollision() {
     const head = snake[0];
     for (let i = 0; i < food.length; i++) {
@@ -219,10 +270,24 @@
     return -1;
   }
 
+  // Increase snake speed capped
   function increaseSpeed() {
     snakeSpeed = Math.min(snakeSpeed + SPEED_INCREMENT, MAX_SPEED);
   }
 
+  // Check if projectile hits the snake head
+  function checkProjectileCollision() {
+    const head = snake[0];
+    for(let i = 0; i < projectiles.length; i++) {
+      const p = projectiles[i];
+      if(dist(head.x, head.y, p.x, p.y) < p.radius + SEGMENT_SIZE*0.6) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // World to screen coords conversion
   function worldToScreen(x, y, viewportX, viewportY) {
     return {
       x: x - viewportX + WIDTH / 2,
@@ -230,6 +295,7 @@
     };
   }
 
+  // Draw snake parts
   function roundRect(ctx, x, y, w, h, r) {
     ctx.beginPath();
     ctx.moveTo(x + r, y);
@@ -302,6 +368,7 @@
     ctx.restore();
   }
 
+  // Draw glowing star food
   function drawFoodItem(x, y, size, color) {
     const glowRadius = size * 2.1;
     let gradient = ctx.createRadialGradient(x, y, size * 0.25, x, y, glowRadius);
@@ -316,9 +383,9 @@
     const points = 5;
     ctx.fillStyle = color;
     ctx.beginPath();
-    for(let i = 0; i < points * 2; i++) {
-      const r = (i % 2) ? size * 0.4 : size;
-      const angle = (i * Math.PI) / points - Math.PI / 2;
+    for (let i=0; i < points*2; i++) {
+      const r = (i % 2) ? size*0.4 : size;
+      const angle = (i * Math.PI) / points - Math.PI/2;
       const sx = x + r * Math.cos(angle);
       const sy = y + r * Math.sin(angle);
       if(i === 0) ctx.moveTo(sx, sy);
@@ -328,22 +395,94 @@
     ctx.fill();
 
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    for(let i = 0; i < points; i++) {
-      const angle = (i * 2 * Math.PI) / points - Math.PI / 2;
-      const sx = x + size * 0.6 * Math.cos(angle);
-      const sy = y + size * 0.6 * Math.sin(angle);
+    for(let i=0; i < points; i++) {
+      const angle = (i * 2 * Math.PI) / points - Math.PI/2;
+      const sx = x + size*0.6 * Math.cos(angle);
+      const sy = y + size*0.6 * Math.sin(angle);
       ctx.beginPath();
-      ctx.arc(sx, sy, size * 0.15, 0, Math.PI * 2);
+      ctx.arc(sx, sy, size*0.15, 0, Math.PI*2);
       ctx.fill();
     }
+  }
+
+  // Draw enemies
+  function drawEnemy(x, y, size) {
+    ctx.save();
+    ctx.translate(x, y);
+    // body with metallic gradient
+    let grad = ctx.createRadialGradient(0, 0, size*0.3, 0, 0, size*0.9);
+    grad.addColorStop(0, '#777777');
+    grad.addColorStop(1, '#222222');
+    ctx.fillStyle = grad;
+    ctx.shadowColor = '#00ffda';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, size*0.75, size*0.5, 0, 0, 2*Math.PI);
+    ctx.fill();
+
+    // Eyes
+    ctx.fillStyle = '#00ffda';
+    ctx.beginPath();
+    ctx.ellipse(-size*0.3, 0, size*0.15, size*0.22, 0, 0, 2*Math.PI);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(size*0.3, 0, size*0.15, size*0.22, 0, 0, 2*Math.PI);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Draw projectiles
+  function drawProjectile(x, y, angle, radius) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    let grad = ctx.createRadialGradient(0, 0, radius*0.1, 0, 0, radius*1.5);
+    grad.addColorStop(0, '#00ffda');
+    grad.addColorStop(1, 'transparent');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, radius*1.5, radius*0.6, 0, 0, 2*Math.PI);
+    ctx.fill();
+    ctx.restore();
   }
 
   function clearCanvas() {
     ctx.clearRect(0, 0, WIDTH, HEIGHT);
   }
 
+  // FIXED Input handlers - adjust for canvas bounding rect to get relative coords
+  function setupInput() {
+    const rect = canvas.getBoundingClientRect();
+
+    function pointerMove(evt) {
+      evt.preventDefault();
+      let x, y;
+      if(evt.touches && evt.touches.length > 0) {
+        x = evt.touches[0].clientX - rect.left;
+        y = evt.touches[0].clientY - rect.top;
+      } else {
+        x = evt.clientX - rect.left;
+        y = evt.clientY - rect.top;
+      }
+      // Clamp coordinates inside canvas
+      x = Math.min(Math.max(0, x), rect.width);
+      y = Math.min(Math.max(0, y), rect.height);
+      inputX = x;
+      inputY = y;
+    }
+
+    canvas.addEventListener('mousemove', pointerMove);
+    canvas.addEventListener('touchmove', pointerMove, { passive: false });
+
+    // Initialize input in center of canvas viewport
+    inputX = rect.width / 2;
+    inputY = rect.height / 2;
+  }
+
   function updateInputDirection() {
     const head = snake[0];
+    // Adjust inputX, inputY relative to canvas and convert to world coords
+    // inputX, inputY are relative to canvas top-left
     let worldInputX = head.x + (inputX - WIDTH / 2);
     let worldInputY = head.y + (inputY - HEIGHT / 2);
     const angle = angleTo(head.x, head.y, worldInputX, worldInputY);
@@ -354,46 +493,90 @@
     scoreboard.textContent = `Score: ${score}`;
   }
 
-  function setupInput() {
-    function pointerMove(evt) {
-      evt.preventDefault();
-      let x, y;
-      if(evt.touches && evt.touches.length > 0) {
-        x = evt.touches[0].clientX;
-        y = evt.touches[0].clientY;
-      } else {
-        x = evt.clientX;
-        y = evt.clientY;
-      }
-      x = Math.min(Math.max(0, x), WIDTH);
-      y = Math.min(Math.max(0, y), HEIGHT);
-      inputX = x;
-      inputY = y;
-    }
-    canvas.addEventListener('mousemove', pointerMove);
-    canvas.addEventListener('touchmove', pointerMove, { passive: false });
-
-    inputX = WIDTH / 2;
-    inputY = HEIGHT / 2;
-  }
-
-  function showWinnerScreen() {
+  // Overlay and restart logic
+  function showOverlay(message, buttonText) {
     isGameOver = true;
-    winnerOverlay.style.display = 'block';
+    overlayMessage.textContent = message;
+    overlayButton.textContent = buttonText;
+    overlay.style.display = 'block';
   }
-  function restartGame() {
+
+  function restartFromLevel1() {
     score = 0;
+    currentLevel = 1;
+    snakeSpeed = BASE_SPEED;
     initSnake();
     initFood();
+    enemies = [];
+    projectiles = [];
     updateScore();
-    snakeSpeed = BASE_SPEED;
+    overlay.style.display = 'none';
     isGameOver = false;
-    winnerOverlay.style.display = 'none';
+    instructions.textContent = "Use mouse/touch to steer the snake.";
     requestAnimationFrame(gameLoop);
   }
-  restartBtn.addEventListener('click', restartGame);
+  function startLevel2() {
+    currentLevel = 2;
+    projectiles = [];
+    initEnemies();
+    overlay.style.display = 'none';
+    instructions.textContent = "Level 2: Avoid enemy projectiles!";
+    requestAnimationFrame(gameLoop);
+  }
 
-  function gameLoop() {
+  overlayButton.addEventListener('click', () => {
+    if(currentLevel === 1) {
+      restartFromLevel1();
+    } else {
+      restartFromLevel1();
+    }
+  });
+
+  function updateEnemies(now, viewportX, viewportY) {
+    for(let enemy of enemies) {
+      enemy.angle += 0.005;
+      enemy.x += Math.cos(enemy.angle) * ENEMY_MOVE_SPEED * 0.15;
+      enemy.y += Math.sin(enemy.angle) * ENEMY_MOVE_SPEED * 0.15;
+
+      if(now - enemy.lastShot > ENEMY_SHOOT_INTERVAL) {
+        enemy.lastShot = now;
+        spawnProjectile(enemy);
+      }
+    }
+  }
+
+  function updateProjectiles(viewportX, viewportY) {
+    projectiles = projectiles.filter(p => {
+      p.x += Math.cos(p.angle) * p.speed;
+      p.y += Math.sin(p.angle) * p.speed;
+
+      const dx = p.x - viewportX;
+      const dy = p.y - viewportY;
+      const distToVp = Math.sqrt(dx*dx + dy*dy);
+      return distToVp < 2500;
+    });
+  }
+
+  function drawEnemies(viewportX, viewportY) {
+    for(let enemy of enemies) {
+      let pos = worldToScreen(enemy.x, enemy.y, viewportX, viewportY);
+      if(pos.x >= -ENEMY_SIZE && pos.x <= WIDTH + ENEMY_SIZE &&
+         pos.y >= -ENEMY_SIZE && pos.y <= HEIGHT + ENEMY_SIZE) {
+        drawEnemy(pos.x, pos.y, ENEMY_SIZE);
+      }
+    }
+  }
+  function drawProjectiles(viewportX, viewportY) {
+    for(let p of projectiles) {
+      let pos = worldToScreen(p.x, p.y, viewportX, viewportY);
+      if(pos.x >= -p.radius && pos.x <= WIDTH + p.radius &&
+         pos.y >= -p.radius && pos.y <= HEIGHT + p.radius) {
+        drawProjectile(pos.x, pos.y, p.angle, p.radius);
+      }
+    }
+  }
+
+  function gameLoop(timestamp = 0) {
     if(isGameOver) return;
 
     clearCanvas();
@@ -405,62 +588,85 @@
     const viewportX = snake[0].x;
     const viewportY = snake[0].y;
 
-    let eatenIndex = -1;
-    for(let i = 0; i < food.length; i++) {
-      if(dist(food[i].x, food[i].y, viewportX, viewportY) < FOOD_SIZE + SEGMENT_SIZE*0.6) {
-        eatenIndex = i;
-        break;
+    if(currentLevel === 1) {
+      let eatenIndex = -1;
+      for(let i = 0; i < food.length; i++) {
+        if(dist(food[i].x, food[i].y, viewportX, viewportY) < FOOD_SIZE + SEGMENT_SIZE*0.6) {
+          eatenIndex = i;
+          break;
+        }
       }
-    }
+      if(eatenIndex !== -1) {
+        food.splice(eatenIndex, 1);
+        score++;
+        updateScore();
+        increaseSpeed();
+        if(score >= WIN_SCORE) {
+          showOverlay("🎉 YOU WIN LEVEL 1! 🎉", "Start Level 2");
+          overlayButton.onclick = () => {
+            startLevel2();
+          };
+          return;
+        }
+      }
 
-    if(eatenIndex !== -1) {
-      food.splice(eatenIndex, 1);
-      score++;
-      updateScore();
-      increaseSpeed();
-      if(score >= WIN_SCORE) {
-        showWinnerScreen();
+      const RING_NEAR = 1500;
+      const RING_FAR = 2500;
+      const RING_ULTRA_FAR = 4000;
+      while(food.length < FOOD_COUNT) {
+        let rand = Math.random();
+        let spawnRadius;
+        if(rand < 0.05) spawnRadius = RING_ULTRA_FAR;
+        else if(rand < 0.55) spawnRadius = RING_FAR;
+        else spawnRadius = RING_NEAR;
+        let angle = Math.random() * 2 * Math.PI;
+        let minRadius = 0;
+        if(spawnRadius === RING_NEAR) minRadius = 0;
+        else if(spawnRadius === RING_FAR) minRadius = RING_NEAR;
+        else minRadius = RING_FAR;
+        let radius = Math.sqrt(Math.random() * (spawnRadius*spawnRadius - minRadius*minRadius) + minRadius*minRadius);
+        let fx = viewportX + radius * Math.cos(angle);
+        let fy = viewportY + radius * Math.sin(angle);
+        food.push({
+          x: fx,
+          y: fy,
+          color: FOOD_COLORS[Math.floor(Math.random() * FOOD_COLORS.length)]
+        });
+      }
+
+      food.forEach(f => {
+        const pos = worldToScreen(f.x, f.y, viewportX, viewportY);
+        if(pos.x >= -FOOD_SIZE && pos.x <= WIDTH + FOOD_SIZE &&
+          pos.y >= -FOOD_SIZE && pos.y <= HEIGHT + FOOD_SIZE) {
+          drawFoodItem(pos.x, pos.y, FOOD_SIZE, f.color);
+        }
+      });
+
+    } else if(currentLevel === 2) {
+      updateEnemies(timestamp, viewportX, viewportY);
+      updateProjectiles(viewportX, viewportY);
+
+      drawEnemies(viewportX, viewportY);
+      drawProjectiles(viewportX, viewportY);
+
+      food.forEach(f => {
+        const pos = worldToScreen(f.x, f.y, viewportX, viewportY);
+        if(pos.x >= -FOOD_SIZE && pos.x <= WIDTH + FOOD_SIZE &&
+          pos.y >= -FOOD_SIZE && pos.y <= HEIGHT + FOOD_SIZE) {
+          drawFoodItem(pos.x, pos.y, FOOD_SIZE, f.color);
+        }
+      });
+
+      if(checkProjectileCollision()) {
+        showOverlay("💥 YOU LOST! Hit by an enemy! 💥", "Restart Level 1");
+        overlayButton.onclick = () => {
+          restartFromLevel1();
+        };
         return;
       }
     }
 
-    const RING_NEAR = 1500;
-    const RING_FAR = 2500;
-    const RING_ULTRA_FAR = 4000;
-
-    while(food.length < FOOD_COUNT) {
-      let rand = Math.random();
-      let spawnRadius;
-      if(rand < 0.05) {
-        spawnRadius = RING_ULTRA_FAR;
-      } else if(rand < 0.55) {
-        spawnRadius = RING_FAR;
-      } else {
-        spawnRadius = RING_NEAR;
-      }
-      let angle = Math.random() * 2 * Math.PI;
-      let minRadius = 0;
-      if(spawnRadius === RING_NEAR) minRadius = 0;
-      else if(spawnRadius === RING_FAR) minRadius = RING_NEAR;
-      else minRadius = RING_FAR;
-      let radius = Math.sqrt(Math.random() * (spawnRadius*spawnRadius - minRadius*minRadius) + minRadius*minRadius);
-      let fx = viewportX + radius * Math.cos(angle);
-      let fy = viewportY + radius * Math.sin(angle);
-      food.push({
-        x: fx,
-        y: fy,
-        color: FOOD_COLORS[Math.floor(Math.random() * FOOD_COLORS.length)]
-      });
-    }
-
-    food.forEach(f => {
-      const pos = worldToScreen(f.x, f.y, viewportX, viewportY);
-      if(pos.x >= -FOOD_SIZE && pos.x <= WIDTH + FOOD_SIZE &&
-         pos.y >= -FOOD_SIZE && pos.y <= HEIGHT + FOOD_SIZE) {
-        drawFoodItem(pos.x, pos.y, FOOD_SIZE, f.color);
-      }
-    });
-
+    // Draw snake
     for(let i = snake.length - 1; i >= 1; i--) {
       const seg = snake[i];
       const pos = worldToScreen(seg.x, seg.y, viewportX, viewportY);
@@ -478,16 +684,38 @@
   function init() {
     initSnake();
     initFood();
-    setupInput();
-    updateScore();
+    enemies = [];
+    projectiles = [];
+    currentLevel = 1;
     isGameOver = false;
+    updateScore();
+    instructions.textContent = "Use mouse/touch to steer the snake.";
+    overlay.style.display = 'none';
+    setupInput();
     requestAnimationFrame(gameLoop);
   }
   init();
 
+  // Expose restart function for external use if needed
+  window.restartFromLevel1 = () => {
+    score = 0;
+    currentLevel = 1;
+    snakeSpeed = BASE_SPEED;
+    initSnake();
+    initFood();
+    enemies = [];
+    projectiles = [];
+    updateScore();
+    overlay.style.display = 'none';
+    isGameOver = false;
+    instructions.textContent = "Use mouse/touch to steer the snake.";
+    requestAnimationFrame(gameLoop);
+  };
 })();
 </script>
 </body>
 </html>
+</create_file>
+
 
 
