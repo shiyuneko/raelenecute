@@ -106,7 +106,6 @@
   let WIDTH = window.innerWidth;
   let HEIGHT = window.innerHeight;
 
-  // Game parameters
   const FOOD_COUNT = 90;
   const SNAKE_INITIAL_LENGTH = 14;
   const SEGMENT_SIZE = 18;
@@ -117,20 +116,18 @@
   const FOOD_SIZE = 12;
   const WIN_SCORE = 50;
 
-  // Enemy parameters for level 2
-  const ENEMY_SIZE = 30;
+  const ENEMY_SIZE = 40;
   const ENEMY_PROJECTILE_SIZE = 8;
   const ENEMY_PROJECTILE_SPEED = 6;
   const ENEMY_SHOOT_INTERVAL = 1500; // ms
-  const ENEMY_MOVE_SPEED = 1.2;
-  const NUM_ENEMIES = 5;
+  const ENEMY_MOVE_SPEED = 5;
+  const NUM_ENEMIES = 10;
 
   const FOOD_COLORS = [
     '#ff3c00', '#ffba00', '#44ff00', '#00ffd5', '#007bff', '#ff00d6',
     '#ffffff', '#ffaaff', '#aaffff', '#ffff00',
   ];
 
-  // Game state variables
   let score = 0;
   let snake = [];
   let snakeDirection = 0;
@@ -142,11 +139,9 @@
   let isGameOver = false;
   let currentLevel = 1;
 
-  // Enemy & projectile arrays
   let enemies = [];
   let projectiles = [];
 
-  // Resize canvas on window size changes
   function resizeCanvas() {
     WIDTH = window.innerWidth;
     HEIGHT = window.innerHeight;
@@ -160,7 +155,6 @@
   });
   resizeCanvas();
 
-  // Initialize snake at origin fixed length no growth
   function initSnake() {
     snake = [];
     const startX = 0;
@@ -177,7 +171,6 @@
     snakeSpeed = BASE_SPEED;
   }
 
-  // Initialize food around snake for both levels
   function initFood() {
     food = [];
     const nearRadius = 1500;
@@ -194,7 +187,6 @@
     }
   }
 
-  // Initialize enemies for level 2 around snake viewport
   function initEnemies() {
     enemies = [];
     const spawnRadius = 1000;
@@ -210,7 +202,6 @@
     }
   }
 
-  // Spawn a projectile from an enemy towards snake head
   function spawnProjectile(enemy) {
     const head = snake[0];
     const angle = Math.atan2(head.y - enemy.y, head.x - enemy.x);
@@ -223,7 +214,6 @@
     });
   }
 
-  // Math helpers
   function angleTo(ax, ay, bx, by) {
     return Math.atan2(by - ay, bx - ax);
   }
@@ -238,7 +228,6 @@
     return angle;
   }
 
-  // Smooth turning for snake
   function updateDirection() {
     const diff = normalizeAngle(targetDirection - snakeDirection);
     if (Math.abs(diff) < TURN_SPEED) {
@@ -249,7 +238,6 @@
     }
   }
 
-  // Move snake forward fixed length no growth
   function updateSnake() {
     const head = snake[0];
     const newHeadX = head.x + Math.cos(snakeDirection) * snakeSpeed;
@@ -259,7 +247,6 @@
     snake.pop();
   }
 
-  // Check collisions with food, return index or -1
   function checkFoodCollision() {
     const head = snake[0];
     for (let i = 0; i < food.length; i++) {
@@ -270,12 +257,10 @@
     return -1;
   }
 
-  // Increase snake speed capped
   function increaseSpeed() {
     snakeSpeed = Math.min(snakeSpeed + SPEED_INCREMENT, MAX_SPEED);
   }
 
-  // Check if projectile hits the snake head
   function checkProjectileCollision() {
     const head = snake[0];
     for(let i = 0; i < projectiles.length; i++) {
@@ -287,7 +272,6 @@
     return false;
   }
 
-  // World to screen coords conversion
   function worldToScreen(x, y, viewportX, viewportY) {
     return {
       x: x - viewportX + WIDTH / 2,
@@ -295,7 +279,6 @@
     };
   }
 
-  // Draw snake parts
   function roundRect(ctx, x, y, w, h, r) {
     ctx.beginPath();
     ctx.moveTo(x + r, y);
@@ -368,7 +351,6 @@
     ctx.restore();
   }
 
-  // Draw glowing star food
   function drawFoodItem(x, y, size, color) {
     const glowRadius = size * 2.1;
     let gradient = ctx.createRadialGradient(x, y, size * 0.25, x, y, glowRadius);
@@ -405,11 +387,9 @@
     }
   }
 
-  // Draw enemies
   function drawEnemy(x, y, size) {
     ctx.save();
     ctx.translate(x, y);
-    // body with metallic gradient
     let grad = ctx.createRadialGradient(0, 0, size*0.3, 0, 0, size*0.9);
     grad.addColorStop(0, '#777777');
     grad.addColorStop(1, '#222222');
@@ -420,7 +400,6 @@
     ctx.ellipse(0, 0, size*0.75, size*0.5, 0, 0, 2*Math.PI);
     ctx.fill();
 
-    // Eyes
     ctx.fillStyle = '#00ffda';
     ctx.beginPath();
     ctx.ellipse(-size*0.3, 0, size*0.15, size*0.22, 0, 0, 2*Math.PI);
@@ -431,7 +410,6 @@
     ctx.restore();
   }
 
-  // Draw projectiles
   function drawProjectile(x, y, angle, radius) {
     ctx.save();
     ctx.translate(x, y);
@@ -450,7 +428,6 @@
     ctx.clearRect(0, 0, WIDTH, HEIGHT);
   }
 
-  // FIXED Input handlers - adjust for canvas bounding rect to get relative coords
   function setupInput() {
     const rect = canvas.getBoundingClientRect();
 
@@ -464,7 +441,6 @@
         x = evt.clientX - rect.left;
         y = evt.clientY - rect.top;
       }
-      // Clamp coordinates inside canvas
       x = Math.min(Math.max(0, x), rect.width);
       y = Math.min(Math.max(0, y), rect.height);
       inputX = x;
@@ -473,16 +449,12 @@
 
     canvas.addEventListener('mousemove', pointerMove);
     canvas.addEventListener('touchmove', pointerMove, { passive: false });
-
-    // Initialize input in center of canvas viewport
     inputX = rect.width / 2;
     inputY = rect.height / 2;
   }
 
   function updateInputDirection() {
     const head = snake[0];
-    // Adjust inputX, inputY relative to canvas and convert to world coords
-    // inputX, inputY are relative to canvas top-left
     let worldInputX = head.x + (inputX - WIDTH / 2);
     let worldInputY = head.y + (inputY - HEIGHT / 2);
     const angle = angleTo(head.x, head.y, worldInputX, worldInputY);
@@ -493,7 +465,6 @@
     scoreboard.textContent = `Score: ${score}`;
   }
 
-  // Overlay and restart logic
   function showOverlay(message, buttonText) {
     isGameOver = true;
     overlayMessage.textContent = message;
@@ -665,8 +636,6 @@
         return;
       }
     }
-
-    // Draw snake
     for(let i = snake.length - 1; i >= 1; i--) {
       const seg = snake[i];
       const pos = worldToScreen(seg.x, seg.y, viewportX, viewportY);
@@ -695,8 +664,6 @@
     requestAnimationFrame(gameLoop);
   }
   init();
-
-  // Expose restart function for external use if needed
   window.restartFromLevel1 = () => {
     score = 0;
     currentLevel = 1;
